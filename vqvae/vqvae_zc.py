@@ -117,7 +117,7 @@ class ResBlock(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, in_channel, channel, n_res_block, n_res_channel, stride, embed_dim, n_embed, simple):
         super().__init__()
-        
+
         if stride == 6:
             if simple:
                 blocks = [
@@ -136,7 +136,7 @@ class Encoder(nn.Module):
                     nn.Conv2d(channel //2, channel, 4, stride=2, padding=1),
                 ]
 
-            
+
         elif stride == 4:
             blocks = [
                 nn.Conv2d(in_channel, channel // 2, 4, stride=2, padding=1),
@@ -153,7 +153,7 @@ class Encoder(nn.Module):
                 nn.Conv2d(channel // 2, channel, 3, padding=1),
             ]
 
-        for i in range(n_res_block):
+        for _ in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel))
 
         blocks.append(nn.ReLU(inplace=True))
@@ -172,10 +172,8 @@ class Decoder(nn.Module):
         blocks = [
             nn.ConvTranspose2d(in_channel, channel, 4, stride=2, padding=1),
         ]
-        
-        for i in range(n_res_block):
-            blocks.append(ResBlock(channel, n_res_channel))
 
+        blocks.extend(ResBlock(channel, n_res_channel) for _ in range(n_res_block))
         blocks.append(nn.ReLU(inplace=True))
 
         if stride == 4 and simple:
@@ -264,9 +262,7 @@ class VQVAE(nn.Module):
     def decode_code(self, code_t):
         quant_t = self.quantize_t.embed_code(code_t)
         quant_t = quant_t.permute(0, 3, 1, 2)
-        dec = self.dec(quant_t)
-
-        return dec
+        return self.dec(quant_t)
 
 
 
@@ -322,10 +318,13 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
     .. _Link 2:
         https://arxiv.org/abs/1611.01144
     """
-    if not torch.jit.is_scripting():
-        if type(logits) is not Tensor and has_torch_function((logits,)):
-            return handle_torch_function(
-                gumbel_softmax, (logits,), logits, tau=tau, hard=hard, eps=eps, dim=dim)
+    if (
+        not torch.jit.is_scripting()
+        and type(logits) is not Tensor
+        and has_torch_function((logits,))
+    ):
+        return handle_torch_function(
+            gumbel_softmax, (logits,), logits, tau=tau, hard=hard, eps=eps, dim=dim)
     if eps != 1e-10:
         warnings.warn("`eps` parameter is deprecated and has no effect.")
 
@@ -338,9 +337,8 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
         index = y_soft.max(dim, keepdim=True)[1]
         y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
         ret = y_hard - y_soft.detach() + y_soft
-        return ret, index
     else:
         # Reparametrization trick.
         ret = y_soft
         index = y_soft.max(dim, keepdim=True)[1]
-        return ret, index
+    return ret, index

@@ -40,4 +40,4 @@ def magnify(model, tokenizer, tokens_list, text_token_list, args):
 
                 magnified_code_part_completed = filling_sequence(model, seq, args, invalid_slices=[slice(tokenizer.img_tokenizer.num_tokens, None)])
                 magnified_code[16 * i: 16 * i + line, 16 * j: 16 * (j+2)] = magnified_code_part_completed[0, context_len:].view(line, 32)
-        return magnified_code.view(1, s * s * 4)
+        return magnified_code.view(1, s**2 * 4)

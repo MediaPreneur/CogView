@@ -336,10 +336,7 @@ class GPT2ParallelTransformerLayer(torch.nn.Module):
         if self.scale_normalization:
             mlp_output = self.fourth_layernorm(mlp_output)
 
-        # Second residual connection.
-        output = layernorm_input + mlp_output
-
-        return output
+        return layernorm_input + mlp_output
 
 def unscaled_init_method(sigma):
     """Init method based on N(0, sigma)."""
@@ -531,7 +528,7 @@ class GPT2ParallelTransformer(torch.nn.Module):
             def custom_forward(*inputs):
                 layers_ = self.layers[start:end]
                 x_, inputs = inputs[0], inputs[1:]
-                    
+
                 if is_sparse > 0:
                     inputs, mems_ = inputs[:3], inputs[3:]
                 else:
@@ -667,10 +664,7 @@ def standard_attention(query_layer, key_layer, value_layer, attention_mask, atte
     if attention_dropout is not None:
         with get_cuda_rng_tracker().fork():
             attention_probs = attention_dropout(attention_probs)
-    # Context layer.
-    # [b, np, s, hn]
-    context_layer = torch.matmul(attention_probs, value_layer)
-    return context_layer
+    return torch.matmul(attention_probs, value_layer)
 
 def sparse_attention(q, k, v, pivot_idx, pivot_attention_mask, query_window=128, key_window_times=6, attention_dropout=None):
     ''' Sparse Attention
@@ -698,19 +692,16 @@ def sparse_attention(q, k, v, pivot_idx, pivot_attention_mask, query_window=128,
     # =====================   Window Attention   ======================= #
     window_k = _chunk(k, query_window, key_window_times)
     window_v = _chunk(v, query_window, key_window_times)
-    # window_k [b, n_head, s // w up int, w*times, hn]
-
-    if s % w == 0: # training # TODO args check
-        assert k.shape[2] == s
-        assert window_k.shape[2] == s // w
-        window_q = q.view(b, n_head, s // w, w, hn)        
-        attention_scores = torch.matmul(window_q, window_k.transpose(-1, -2))
-        window_attention_mask = torch.ones((w, w * key_window_times), dtype=attention_scores.dtype, device=q.device).tril_(diagonal=w * (key_window_times - 1))
-        attention_scores_window = torch.mul(attention_scores, window_attention_mask / math.sqrt(hn)) - 10000.0 * (1.0 - window_attention_mask)
-        for t in range(1, key_window_times):
-            attention_scores_window[:, :, t - 1, :, :w * key_window_times - w * t] -= 10000.0
-    else: 
+    if s % w != 0:
         raise ValueError('The seq_len must be exactly divided by window_size.')
+    assert k.shape[2] == s
+    assert window_k.shape[2] == s // w
+    window_q = q.view(b, n_head, s // w, w, hn)
+    attention_scores = torch.matmul(window_q, window_k.transpose(-1, -2))
+    window_attention_mask = torch.ones((w, w * key_window_times), dtype=attention_scores.dtype, device=q.device).tril_(diagonal=w * (key_window_times - 1))
+    attention_scores_window = torch.mul(attention_scores, window_attention_mask / math.sqrt(hn)) - 10000.0 * (1.0 - window_attention_mask)
+    for t in range(1, key_window_times):
+        attention_scores_window[:, :, t - 1, :, :w * key_window_times - w * t] -= 10000.0
     # =====================   Joint Softmax   ======================= #
     attention_scores_window = attention_scores_window.view(b, n_head, s, w * key_window_times)
     attention_scores = torch.cat((attention_scores_pivot, attention_scores_window), dim=-1)
@@ -720,9 +711,17 @@ def sparse_attention(q, k, v, pivot_idx, pivot_attention_mask, query_window=128,
         with get_cuda_rng_tracker().fork():
             attention_probs = attention_dropout(attention_probs)
 
-    context_layer = torch.matmul(attention_probs[..., :-w * key_window_times], pivot_v) + torch.einsum('bcgwk,bcgkh->bcgwh', attention_probs[..., -w * key_window_times:].view(b, n_head, s // w, w, w * key_window_times), window_v).view(b, n_head, s, hn)
-
-    return context_layer
+    return torch.matmul(
+        attention_probs[..., : -w * key_window_times], pivot_v
+    ) + torch.einsum(
+        'bcgwk,bcgkh->bcgwh',
+        attention_probs[..., -w * key_window_times :].view(
+            b, n_head, s // w, w, w * key_window_times
+        ),
+        window_v,
+    ).view(
+        b, n_head, s, hn
+    )
 
 def sparse_attention_inference(q, k, v, pivot_and_window_idx, **kwargs):
     '''the inference process of sparse attention.
@@ -746,8 +745,7 @@ def sparse_attention_inference(q, k, v, pivot_and_window_idx, **kwargs):
 
     attention_probs = torch.nn.Softmax(dim=-1)(attention_scores)
 
-    context_layer = torch.matmul(attention_probs, pivot_v) 
-    return context_layer
+    return torch.matmul(attention_probs, pivot_v)
 
 
 def test_sparse_attention():       

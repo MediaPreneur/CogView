@@ -162,12 +162,12 @@ def generate_images_once(model, args, raw_text, seq=None, num=8, query_template=
         add_interlacing_beam_marks(seq, nb=min(num, mbz))
         assert num < mbz or num % mbz == 0
         output_tokens_list = []
-        for tim in range(max(num // mbz, 1)):
+        for _ in range(max(num // mbz, 1)):
             output_tokens_list.append(filling_sequence(model, seq.clone(), args))
             torch.cuda.empty_cache()
 
         output_tokens_list = torch.cat(output_tokens_list, dim=0)
-        
+
         print("\nTaken time {:.2f}\n".format(time.time() - start_time), flush=True)
         print("\nContext:", raw_text, flush=True)
         imgs, txts = [], []
@@ -183,7 +183,7 @@ def generate_images_once(model, args, raw_text, seq=None, num=8, query_template=
             txts.append(decoded_txts)
         if args.generation_task == 'image2text':
             print(txts)
-            return 
+            return
         if args.debug:
             output_file_prefix = raw_text.replace('/', '')[:20]
             output_file = os.path.join(output_path, f"{output_file_prefix}-{datetime.now().strftime('%m-%d-%H-%M-%S')}.jpg")
@@ -196,8 +196,16 @@ def generate_images_once(model, args, raw_text, seq=None, num=8, query_template=
             for i in range(len(imgs)):
                 save_image(imgs[i], os.path.join(output_path,f'{i}.jpg'), normalize=True)
                 os.chmod(os.path.join(output_path,f'{i}.jpg'), stat.S_IRWXO+stat.S_IRWXG+stat.S_IRWXU)
-            save_image(torch.cat(imgs, dim=0), os.path.join(output_path,f'concat.jpg'), normalize=True)
-            os.chmod(os.path.join(output_path,f'concat.jpg'), stat.S_IRWXO+stat.S_IRWXG+stat.S_IRWXU)
+            save_image(
+                torch.cat(imgs, dim=0),
+                os.path.join(output_path, 'concat.jpg'),
+                normalize=True,
+            )
+
+            os.chmod(
+                os.path.join(output_path, 'concat.jpg'),
+                stat.S_IRWXO + stat.S_IRWXG + stat.S_IRWXU,
+            )
 
 def generate_images_continually(model, args):
     if args.generation_task == 'text2image':
@@ -282,9 +290,10 @@ def prepare_tokenizer(args):
                mpu.get_model_parallel_world_size()
     while (after % multiple) != 0:
         after += 1
-    print_rank_0('> padded vocab (size: {}) with {} dummy '
-                 'tokens (new size: {})'.format(
-        before, after - before, after))
+    print_rank_0(
+        f'> padded vocab (size: {before}) with {after - before} dummy tokens (new size: {after})'
+    )
+
 
     args.vocab_size = after
     print("prepare tokenizer done", flush=True)

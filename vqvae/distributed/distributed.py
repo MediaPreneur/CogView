@@ -88,9 +88,9 @@ def all_gather(data):
     size_list = [int(size.item()) for size in size_list]
     max_size = max(size_list)
 
-    tensor_list = []
-    for _ in size_list:
-        tensor_list.append(torch.ByteTensor(size=(max_size,)).to("cuda"))
+    tensor_list = [
+        torch.ByteTensor(size=(max_size,)).to("cuda") for _ in size_list
+    ]
 
     if local_size != max_size:
         padding = torch.ByteTensor(size=(max_size - local_size,)).to("cuda")
@@ -127,7 +127,7 @@ def reduce_dict(input_dict, average=True):
         if dist.get_rank() == 0 and average:
             values /= world_size
 
-        reduced_dict = {k: v for k, v in zip(keys, values)}
+        reduced_dict = dict(zip(keys, values))
 
     return reduced_dict
 

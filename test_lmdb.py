@@ -3,8 +3,7 @@ import os, sys
 from data_utils import get_tokenizer
 
 def initialize(file_name):
-    env = lmdb.open(file_name, "r")
-    return env
+    return lmdb.open(file_name, "r")
 
 def insert(env, sid, name):
     txn = env.begin(write=True)
@@ -25,8 +24,7 @@ def update(env, sid, name):
 import pickle
 def search(env, sid):
     txn = env.begin()
-    data = pickle.loads(txn.get(str(sid).encode('utf-8')))
-    return data
+    return pickle.loads(txn.get(str(sid).encode('utf-8')))
 
 import argparse
 import torch

@@ -47,8 +47,7 @@ def initialize_model_parallel(model_parallel_size_):
     ranks 8 to 15 belong to the second box.
     """
     if torch.distributed.get_rank() == 0:
-        print('> initializing model parallel with size {}'.format(
-            model_parallel_size_))
+        print(f'> initializing model parallel with size {model_parallel_size_}')
     # Get world size and rank. Ensure some consistencies.
     assert torch.distributed.is_initialized()
     world_size = torch.distributed.get_world_size()
@@ -80,9 +79,7 @@ def initialize_model_parallel(model_parallel_size_):
 
 def model_parallel_is_initialized():
     """Check if model and data parallel groups are initialized."""
-    if _MODEL_PARALLEL_GROUP is None or _DATA_PARALLEL_GROUP is None:
-        return False
-    return True
+    return _MODEL_PARALLEL_GROUP is not None and _DATA_PARALLEL_GROUP is not None
 
 
 def get_model_parallel_group():

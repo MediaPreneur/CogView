@@ -173,7 +173,7 @@ class StreamingRarDataset(IterableDataset):
     def __next__(self):
         if self.pointer >= len(self.members):
             raise StopIteration()
-        if self.handle == None:
+        if self.handle is None:
             archive = unrarlib.RAROpenArchiveDataEx(
             self.rar.filename, mode=constants.RAR_OM_EXTRACT)
             self.handle = self.rar._open(archive)

@@ -178,7 +178,7 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
     if np.iscomplexobj(covmean):
         if not np.allclose(np.diagonal(covmean).imag, 0, atol=1e-3):
             m = np.max(np.abs(covmean.imag))
-            raise ValueError('Imaginary component {}'.format(m))
+            raise ValueError(f'Imaginary component {m}')
         covmean = covmean.real
 
     tr_covmean = np.trace(covmean)
@@ -239,15 +239,14 @@ def calculate_fid_given_dataset(dataset1, dataset2, batch_size, cuda=True, dims=
     m1, s1 = calculate_activation_statistics(loader1, model, batch_size, dims, cuda)
     loader2 = torch.utils.data.DataLoader(dataset=dataset2, batch_size=batch_size, shuffle=False, drop_last=True, num_workers=8)
     m2, s2 = calculate_activation_statistics(loader2, model, batch_size, dims, cuda)
-    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-    return fid_value
+    return calculate_frechet_distance(m1, s1, m2, s2)
 
 
 def calculate_fid_given_paths(paths, batch_size, cuda, dims):
     """Calculates the FID of two paths"""
     for p in paths:
         if not os.path.exists(p):
-            raise RuntimeError('Invalid path: %s' % p)
+            raise RuntimeError(f'Invalid path: {p}')
 
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
     model = InceptionV3([block_idx])
@@ -256,8 +255,7 @@ def calculate_fid_given_paths(paths, batch_size, cuda, dims):
 
     m1, s1 = _compute_statistics_of_path(paths[0], model, batch_size, dims, cuda)
     m2, s2 = _compute_statistics_of_path(paths[1], model, batch_size, dims, cuda)
-    fid_value = calculate_frechet_distance(m1, s1, m2, s2)
-    return fid_value
+    return calculate_frechet_distance(m1, s1, m2, s2)
 
 if __name__ == '__main__':
     args = parser.parse_args()

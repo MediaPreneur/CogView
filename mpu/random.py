@@ -60,27 +60,22 @@ _MODEL_PARALLEL_RNG_TRACKER_NAME = 'model-parallel-rng'
 transport_stream = None 
 cuda_device=None
 def detach_variable(inputs, device=None):
-    if isinstance(inputs, tuple):
-        out = []
-        for inp in inputs:
-            if not isinstance(inp, torch.Tensor):
-                out.append(inp)
-                continue
-
-            requires_grad = inp.requires_grad
-
-            if device is not None:
-                x = inp.to(device=device)
-            else:
-                x = inp
- 
-            x = x.detach()
-            x.requires_grad = requires_grad
-            out.append(x)
-        return tuple(out)
-    else:
+    if not isinstance(inputs, tuple):
         raise RuntimeError(
             "Only tuple of tensors is supported. Got Unsupported input type: ", type(inputs).__name__)
+    out = []
+    for inp in inputs:
+        if not isinstance(inp, torch.Tensor):
+            out.append(inp)
+            continue
+
+        requires_grad = inp.requires_grad
+
+        x = inp.to(device=device) if device is not None else inp
+        x = x.detach()
+        x.requires_grad = requires_grad
+        out.append(x)
+    return tuple(out)
 
 def _set_cuda_rng_state(new_state, device=-1):
     """Sets the random number generator state of the current GPU.
@@ -138,10 +133,7 @@ class CudaRNGStatesTracker:
     def get_states(self):
         """Get rng states. Copy the dictionary so we have direct
         pointers to the states, not just a pointer to the dictionary."""
-        states = {}
-        for name in self.states_:
-            states[name] = self.states_[name]
-        return states
+        return {name: self.states_[name] for name in self.states_}
 
     def set_states(self, states):
         """Set the rng states. For efficiency purposes, we do not check
@@ -152,11 +144,11 @@ class CudaRNGStatesTracker:
         """Track the rng state."""
         # Check seed is not already used.
         if seed in self.seeds_:
-            raise Exception('seed {} already exists'.format(seed))
+            raise Exception(f'seed {seed} already exists')
         self.seeds_.add(seed)
         # Check that state is not already defined.
         if name in self.states_:
-            raise Exception('cuda rng state {} already exists'.format(name))
+            raise Exception(f'cuda rng state {name} already exists')
         # Get the current rng state.
         orig_rng_state = torch.cuda.get_rng_state()
         # Set the new state and store it.
@@ -171,7 +163,7 @@ class CudaRNGStatesTracker:
         the original state."""
         # Check if we have added the state
         if name not in self.states_:
-            raise Exception('cuda rng state {} is not added'.format(name))
+            raise Exception(f'cuda rng state {name} is not added')
         # Store current rng state.
         orig_cuda_rng_state = torch.cuda.get_rng_state()
         # Set rng state to the desired one
@@ -219,12 +211,11 @@ def model_parallel_cuda_manual_seed(seed):
     data_parallel_seed = seed
 
     if torch.distributed.get_rank() == 0:
-        print('> initializing model parallel cuda seeds on global rank {}, '
-              'model parallel rank {}, and data parallel rank {} with '
-              'model parallel seed: {} and data parallel seed: {}'.format(
-                  torch.distributed.get_rank(), get_model_parallel_rank(),
-                  get_data_parallel_rank(), model_parallel_seed,
-                  data_parallel_seed), flush=True)
+        print(
+            f'> initializing model parallel cuda seeds on global rank {torch.distributed.get_rank()}, model parallel rank {get_model_parallel_rank()}, and data parallel rank {get_data_parallel_rank()} with model parallel seed: {model_parallel_seed} and data parallel seed: {data_parallel_seed}',
+            flush=True,
+        )
+
     _CUDA_RNG_STATE_TRACKER.reset()
     # Set the default state.
     torch.cuda.manual_seed(data_parallel_seed)
@@ -247,7 +238,7 @@ def get_partition_size(item):
     
 def get_full_inputs(tensors):
     inputs=[]
-    for i in range(int(len(tensors)/2)-1):
+    for i in range(len(tensors) // 2 - 1):
         item = tensors[2 * i]
         size = tensors[2* i + 1]
         partition_size = item.numel()
@@ -265,7 +256,7 @@ def get_full_inputs(tensors):
 
         inputs.append(item)
     inputs.append(tensors[-2])
-        
+
     return tuple(inputs)
 
         
@@ -291,7 +282,7 @@ class CheckpointFunction(torch.autograd.Function):
         if cuda_device is None:
             if dist.get_rank()  == 0:
                 print(f"Partition Activations {PARTITION_ACTIVATIONS} and Correctness Check {PA_CORRECTNESS_TEST}")
-            
+
             cuda_device = torch.cuda.current_device()
             #The transport stream is used to overlap the allgather communication for the activations
             #with the computation in the backward pass
@@ -303,7 +294,7 @@ class CheckpointFunction(torch.autograd.Function):
 
         #just in case something funky is happening such as reuse of inputs
         inputs_cuda = [item.to(cuda_device) for item in args]
-        
+
         # Copy the rng states.
         ctx.fwd_cpu_rng_state = torch.get_rng_state()
         ctx.fwd_cuda_rng_state = torch.cuda.get_rng_state()
@@ -314,18 +305,17 @@ class CheckpointFunction(torch.autograd.Function):
             outputs = run_function(*inputs_cuda)
 
         del inputs_cuda
-        
+
         if PARTITION_ACTIVATIONS:
             new_args = []
-            for arg, inp in zip(args,inputs):                
+            for arg, inp in zip(args,inputs):        
                 size= torch.tensor(arg.size())
                 arg.data = inp.data
-                new_args.append(arg)
-                new_args.append(size)
+                new_args.extend((arg, size))
             ctx.save_for_backward(*new_args)
         else:
             ctx.save_for_backward(*args)
-        
+
         return outputs
 
     @staticmethod

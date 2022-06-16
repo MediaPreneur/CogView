@@ -111,7 +111,7 @@ def filling_sequence(
         txt_indices_bool = img_indices_bool = None
     else:
         raise ValueError('set is_sparse==2 for inference.')
-    
+
     while counter < (out_seq_length - 1):
         # Now, we want to generate seq[counter + 1]
         # token[:, index: counter+1] are just added.
@@ -176,14 +176,13 @@ def filling_sequence(
             score_plus = torch.log(torch.gather(log_probs, dim=1, index=prev)[:, 0])
             for idx in range(nb):
                 score[idx] += score_plus[idx]
-        
+
         tokens = torch.cat((tokens, prev.view(tokens.shape[0], 1)), dim=1)
         if args.is_sparse == 2: # update indices
             img_indices_bool = (tokens < img_txt_sep)
             txt_indices_bool = (~img_indices_bool)
 
-    output_tokens_list = tokens.view(tokens.shape[0], -1).contiguous()
-    return output_tokens_list
+    return tokens.view(tokens.shape[0], -1).contiguous()
 
 def shrink_beams(tokens, mems, nb, score):
     # beam search is a failed attempt, will be removed soon...
@@ -224,8 +223,7 @@ def inverse_prompt_score(model, seq, args):
     logits[..., :tokenizer.img_tokenizer.num_tokens] = -float('Inf')
     log_probs = torch.log(F.softmax(logits, dim=-1))
 
-    pred = log_probs[:, botext:-1, :] 
-    target = tokens[:, botext+1:].unsqueeze(-1) 
-    scores = torch.gather(pred, dim=2, index=target).squeeze(-1).sum(dim=-1)
-    return scores
+    pred = log_probs[:, botext:-1, :]
+    target = tokens[:, botext+1:].unsqueeze(-1)
+    return torch.gather(pred, dim=2, index=target).squeeze(-1).sum(dim=-1)
             

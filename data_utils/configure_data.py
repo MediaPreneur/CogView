@@ -34,9 +34,7 @@ def make_data_loader(dataset, batch_size, num_iters, args):
     distributed = world_size > 1
 
     sampler = torch.utils.data.SequentialSampler(dataset)
-    drop_last = distributed
-    # the GPUs in the same model parallel group receive the same data
-    if distributed:
+    if drop_last := distributed:
         batch_sampler = DistributedBatchSampler(sampler,
                                                                     batch_size,
                                                                     drop_last,
@@ -47,11 +45,12 @@ def make_data_loader(dataset, batch_size, num_iters, args):
         batch_sampler = torch.utils.data.BatchSampler(sampler,
                                                         batch_size,
                                                         drop_last)
-    data_loader = torch.utils.data.DataLoader(dataset,
-                                              batch_sampler=batch_sampler,
-                                              num_workers=args.num_workers,
-                                              pin_memory=True)
-    return data_loader
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_sampler=batch_sampler,
+        num_workers=args.num_workers,
+        pin_memory=True,
+    )
 
 
 def make_dataset(dataset_type, path, split, args, **kwargs):
@@ -92,7 +91,7 @@ def make_loaders(args):
     eval_batch_size = batch_size
     if args.eval_batch_size is not None:
         eval_batch_size = args.eval_batch_size * world_size
-    
+
     split = get_split(args)
 
     data_set_args = {
@@ -103,7 +102,7 @@ def make_loaders(args):
 
     eval_set_args = copy.copy(data_set_args)
     eval_set_args['split'] = [1.]
-    
+
     # make datasets splits and tokenizer
     train = None
     valid = None
@@ -301,10 +300,11 @@ def detect_new_datasets(args):
     found = []
     for _p in os.listdir(args.new_dataset_path):
         p = os.path.join(args.new_dataset_path, _p)
-        if (str(p).endswith('lmdb') or str(p).endswith('bin')) and not str(os.path.abspath(p)) in current_datasets:
+        if ((str(p).endswith('lmdb') or str(p).endswith('bin'))) and str(
+            os.path.abspath(p)
+        ) not in current_datasets:
             found.append(p)
-    if len(found) == 0:
+    if not found:
         return None
-    else:
-        args.train_data = args.train_data + found
-        return make_loaders(args)    
+    args.train_data = args.train_data + found
+    return make_loaders(args)    

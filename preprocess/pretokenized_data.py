@@ -50,10 +50,7 @@ def make_super_resolution_batch(model, txts, imgs):
 
     if not hasattr(make_super_resolution_batch, 'pos'):
         pos = ['左上', '正上', '右上', '左侧', '中间', '右侧', '左下', '正下', '右下']
-        pos = [
-            tokenizer.parse_query('[ROI1] 是{}部分图'.format(p))
-            for p in pos
-        ] # [[23, 354...], [232, ...]]
+        pos = [tokenizer.parse_query(f'[ROI1] 是{p}部分图') for p in pos]
         pw = [0, 64, 128] * 3
         ph = [0, 0, 0, 64, 64, 64, 128, 128, 128]
         make_super_resolution_batch.pos = list(zip(pos, ph, pw))
@@ -104,7 +101,7 @@ def make_super_resolution_batch(model, txts, imgs, img_size=512, sampling_num=4)
      ]
     pos = list(zip(ptk, ph, pw))
     weights = [1] * 9
-        
+
 
     s = imgs.shape[-1]
     assert s == imgs.shape[-2] == img_size
@@ -128,39 +125,32 @@ def make_super_resolution_batch(model, txts, imgs, img_size=512, sampling_num=4)
     ret = []
     for i in range(len(txts)):
         code_text = [tokenizer['[ROI1]']] + tokenizer(txts[i]) + [size_tk, tokenizer['[BOI1]']]
-        for j in range(sampling_num):
-            ret.append(
-                concat_codes(code_text,
-                    codes_overviews[i],
-                    patch_prefix[i* sampling_num + j],
-                    codes_patches[i * sampling_num + j],
-                    [tokenizer['[EOI2]']]
-                    )
+        ret.extend(
+            concat_codes(
+                code_text,
+                codes_overviews[i],
+                patch_prefix[i * sampling_num + j],
+                codes_patches[i * sampling_num + j],
+                [tokenizer['[EOI2]']],
             )
+            for j in range(sampling_num)
+        )
+
     return ret
 
 def make_text_image_batch(model, txts, imgs):
     from data_utils import TextCodeTemplate
     s = imgs.shape[-1]
-    assert s == imgs.shape[-2] == 256 
+    assert s == imgs.shape[-2] == 256
     tokenizer = get_tokenizer()
     codes = img2code(model, imgs).cpu().numpy()
-    ret = []
-    for i in range(len(txts)):
-        ret.append( 
-            TextCodeTemplate(txts[i], codes[i])
-        )
-    return ret
+    return [TextCodeTemplate(txts[i], codes[i]) for i in range(len(txts))]
 
 def make_tuple_text_image_batch(model, txts, imgs):
     s = imgs.shape[-1]
     assert s == imgs.shape[-2] == 256
     codes = img2code(model, imgs).cpu().numpy()
-    ret = []
-    for i in range(len(txts)):
-        ret.append(
-            (txts[i], codes[i])
-        )
+    ret = [(txts[i], codes[i]) for i in range(len(txts))]
     return codes
 
 import itertools
@@ -169,9 +159,8 @@ def make_cut_text_batch(txts, seq_len):
     tmp_list = np.array(list(
         itertools.chain(*(PureTextTemplate(txt) for txt in txts))
         ))
-    ret = [
-        tmp_list[en - seq_len: en]
+    return [
+        tmp_list[en - seq_len : en]
         for en in range(seq_len, len(tmp_list), seq_len)
     ]
-    return ret
 

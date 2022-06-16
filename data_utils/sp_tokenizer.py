@@ -83,12 +83,11 @@ class Encoder:
         return [self.encoder.get(token, 1) for token in self.tokenize(text)]
 
     def decode(self, tokens):
-        text = ''.join([self.decoder[token] for token in tokens])
-        return text
+        return ''.join([self.decoder[token] for token in tokens])
 
     def tokenize(self, text):
         bpe_tokens = []
-        bpe_tokens.extend(bpe_token for bpe_token in self.bpe(text).split(' '))
+        bpe_tokens.extend(iter(self.bpe(text).split(' ')))
         return bpe_tokens
 
     def convert_tokens_to_ids(self, tokens):
@@ -132,18 +131,17 @@ def get_encoder(encoder_file, bpe_file):
     filepath, filename = os.path.split(encoder_file)
     shotname, extension = os.path.splitext(filename)
 
-    if (".model" == extension) and (bpe_file == ""):
+    if extension == ".model" and bpe_file == "":
         return Encoder_SP(encoder_file)
-    else:
-        with open(encoder_file, 'r', encoding="utf-8") as f:
-            encoder = json.load(f)
-        with open(bpe_file, 'r', encoding="utf-8") as f:
-            bpe_data = f.read()
-        bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
-        return Encoder(
-            encoder=encoder,
-            bpe_merges=bpe_merges,
-        )
+    with open(encoder_file, 'r', encoding="utf-8") as f:
+        encoder = json.load(f)
+    with open(bpe_file, 'r', encoding="utf-8") as f:
+        bpe_data = f.read()
+    bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
+    return Encoder(
+        encoder=encoder,
+        bpe_merges=bpe_merges,
+    )
 
 
 def from_pretrained():
