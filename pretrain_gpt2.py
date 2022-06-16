@@ -80,9 +80,11 @@ def get_model(args):
                       )
 
     if mpu.get_data_parallel_rank() == 0:
-        print(' > number of parameters on model parallel rank {}: {}'.format(
-            mpu.get_model_parallel_rank(),
-            sum([p.nelement() for p in model.parameters()])), flush=True)
+        print(
+            f' > number of parameters on model parallel rank {mpu.get_model_parallel_rank()}: {sum(p.nelement() for p in model.parameters())}',
+            flush=True,
+        )
+
 
     # To prevent OOM for model sizes that cannot fit in GPU memory in full precision
     if hasattr(args, "deepspeed") and args.deepspeed and args.fp16:
@@ -95,7 +97,6 @@ def get_model(args):
     if args.fp16:
         model = FP16_Module(model)
 
-    # Wrap model for distributed training.
     if not args.deepspeed:
         if USE_TORCH_DDP:
             i = torch.cuda.current_device()
@@ -169,15 +170,15 @@ def get_learning_rate_scheduler(optimizer, args):
     num_iters = max(1, num_iters)
     init_step = -1
     warmup_iter = args.warmup * num_iters
-    lr_scheduler = AnnealingLR(optimizer,
-                               start_lr=args.lr,
-                               warmup_iter=warmup_iter,
-                               num_iters=num_iters,
-                               decay_style=args.lr_decay_style,
-                               last_iter=init_step,
-                               decay_ratio=args.lr_decay_ratio)
-
-    return lr_scheduler
+    return AnnealingLR(
+        optimizer,
+        start_lr=args.lr,
+        warmup_iter=warmup_iter,
+        num_iters=num_iters,
+        decay_style=args.lr_decay_style,
+        last_iter=init_step,
+        decay_ratio=args.lr_decay_ratio,
+    )
 
 
 def setup_model_and_optimizer(args):
@@ -260,10 +261,7 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     timers('data loader').stop()
 
     data_b = mpu.broadcast_data(keys, data, datatype)
@@ -367,12 +365,11 @@ def backward_step(optimizer, model, lm_loss, args, timers):
         # DeepSpeed backward propagation already addressed all reduce communication.
         # Reset the timer to avoid breaking timer logs below.
         timers('allreduce').reset()
-    else:
-        if not USE_TORCH_DDP:
-            timers('allreduce').start()
-            model.allreduce_params(reduce_after=False,
-                                   fp32_allreduce=args.fp32_allreduce)
-            timers('allreduce').stop()
+    elif not USE_TORCH_DDP:
+        timers('allreduce').start()
+        model.allreduce_params(reduce_after=False,
+                               fp32_allreduce=args.fp32_allreduce)
+        timers('allreduce').stop()
 
     lm_loss_reduced = reduced_losses
 
@@ -381,13 +378,12 @@ def backward_step(optimizer, model, lm_loss, args, timers):
         if args.fp16:
             optimizer.update_master_grads()
 
-        # Clipping gradients helps prevent the exploding gradient.
         if args.clip_grad > 0:
-            if not args.fp16:
-                mpu.clip_grad_norm(model.parameters(), args.clip_grad)
-            else:
+            if args.fp16:
                 optimizer.clip_master_grads(args.clip_grad)
 
+            else:
+                mpu.clip_grad_norm(model.parameters(), args.clip_grad)
     return lm_loss_reduced
 
 
@@ -449,8 +445,10 @@ def train_step(data_iterator, model, optimizer, lr_scheduler,
 
 
 def report_iteration_metrics(summary_writer, optimizer, lr, loss, elapsed_time, step, total_step, args, img_loss, txt_loss):
-    log_string = ' iteration {:8d}/{:8d} |'.format(step, total_step)
-    log_string += ' elapsed time per iteration (ms): {:.1f} |'.format(elapsed_time)
+    log_string = ' iteration {:8d}/{:8d} |'.format(
+        step, total_step
+    ) + ' elapsed time per iteration (ms): {:.1f} |'.format(elapsed_time)
+
     log_string += ' learning rate {:.3E} |'.format(lr)
     log_string += ' lm loss {:.6E} |'.format(loss)
     log_string += ' img loss {:.6E} |'.format(img_loss)
@@ -460,14 +458,13 @@ def report_iteration_metrics(summary_writer, optimizer, lr, loss, elapsed_time, 
             optimizer.cur_scale if args.deepspeed else optimizer.loss_scale)
     print_rank_0(log_string)
     if summary_writer is not None:
-        summary_writer.add_scalar(f'Train/lr', lr, step)
-        summary_writer.add_scalar(f'Train/train_loss', loss, step)
-        summary_writer.add_scalar(f'Train/elapsed_time', elapsed_time, step)
+        summary_writer.add_scalar('Train/lr', lr, step)
+        summary_writer.add_scalar('Train/train_loss', loss, step)
+        summary_writer.add_scalar('Train/elapsed_time', elapsed_time, step)
 
 
 def report_evaluate_metrics(summary_writer, prefix, loss, ppl, step):
-    string = ' validation loss at {} | '.format(prefix)
-    string += 'LM loss: {:.6E} | '.format(loss)
+    string = f' validation loss at {prefix} | ' + 'LM loss: {:.6E} | '.format(loss)
     string += 'LM PPL: {:.6E}'.format(ppl)
     length = len(string) + 1
     print_rank_0('-' * 100)
@@ -475,8 +472,8 @@ def report_evaluate_metrics(summary_writer, prefix, loss, ppl, step):
     print_rank_0(string)
     print_rank_0('-' * length)
     if summary_writer is not None:
-        summary_writer.add_scalar(f'Train/valid_ppl', ppl, step)
-        summary_writer.add_scalar(f'Train/valid_loss', loss, step)
+        summary_writer.add_scalar('Train/valid_ppl', ppl, step)
+        summary_writer.add_scalar('Train/valid_loss', loss, step)
 
 
 def train(model, optimizer, lr_scheduler,
@@ -535,7 +532,7 @@ def train(model, optimizer, lr_scheduler,
             total_img_loss = 0.0
             total_txt_loss = 0.0
             if report_memory_flag:
-                report_memory('after {} iterations'.format(args.iteration))
+                report_memory(f'after {args.iteration} iterations')
                 report_memory_flag = False
             if USE_TORCH_DDP:
                 timers.log(['forward', 'backward', 'optimizer',
@@ -551,7 +548,7 @@ def train(model, optimizer, lr_scheduler,
 
         # Evaluation
         if args.eval_interval and args.iteration % args.eval_interval == 0 and args.do_valid:
-            prefix = 'iteration {}'.format(args.iteration)
+            prefix = f'iteration {args.iteration}'
             evaluate_and_print_results(
                 prefix, val_data_iterator, model, args, timers, False, step=args.iteration, summary_writer=summary_writer)
 
@@ -559,8 +556,11 @@ def train(model, optimizer, lr_scheduler,
             torch.distributed.barrier()
             time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             rank = torch.distributed.get_rank()
-            print('rank: {} | time: {} | exiting the program at iteration {}'.
-                  format(rank, time_str, args.iteration), flush=True)
+            print(
+                f'rank: {rank} | time: {time_str} | exiting the program at iteration {args.iteration}',
+                flush=True,
+            )
+
             exit()
 
     return args.iteration, skipped_iters
@@ -581,7 +581,7 @@ def evaluate(data_iterator, model, args, timers, verbose=False):
         while iteration < args.eval_iters:
             iteration += 1
             if verbose and iteration % args.log_interval == 0:
-                print_rank_0('Evaluating iter {}/{}'.format(iteration, args.eval_iters))
+                print_rank_0(f'Evaluating iter {iteration}/{args.eval_iters}')
             # Forward evaluation.
             lm_loss, mems, img_loss, txt_loss = forward_step(data_iterator, model, args, timers, mems=mems)
 
@@ -652,7 +652,7 @@ def initialize_distributed(args):
     init_method = 'tcp://'
     master_ip = os.getenv('MASTER_ADDR', 'localhost')
     master_port = os.getenv('MASTER_PORT', '6000')
-    init_method += master_ip + ':' + master_port
+    init_method += f'{master_ip}:{master_port}'
     torch.distributed.init_process_group(
         backend=args.distributed_backend,
         world_size=args.world_size, rank=args.rank,
@@ -693,9 +693,10 @@ def get_train_val_test_data(args):
                    mpu.get_model_parallel_world_size()
         while (after % multiple) != 0:
             after += 1
-        print_rank_0('> padded vocab (size: {}) with {} dummy '
-                     'tokens (new size: {})'.format(
-                         before, after - before, after))
+        print_rank_0(
+            f'> padded vocab (size: {before}) with {after - before} dummy tokens (new size: {after})'
+        )
+
         token_counts = torch.cuda.LongTensor(
             [after, int(args.do_train), int(args.do_valid), int(args.do_test)])
     else:

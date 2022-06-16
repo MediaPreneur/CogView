@@ -6,6 +6,7 @@
 @Contact :   dm18@mail.tsinghua.edu.cn
 '''
 
+
 # here put the import lib
 import os
 import sys
@@ -14,11 +15,11 @@ import random
 import base64
 
 if __name__ == "__main__":
-    ssh_config = ''
     line_format = 'Host node{}\n\tUser root\n\tPort 2222\n\tHostname {}\n'
-    for i, ip in enumerate(sys.argv[1:]):
-        ssh_config += line_format.format(i, ip)
-    
+    ssh_config = ''.join(
+        line_format.format(i, ip) for i, ip in enumerate(sys.argv[1:])
+    )
+
     ret = os.system(f'echo \"{ssh_config}\" > ~/.ssh/config && chmod 600 ~/.ssh/config')
     assert ret == 0
 

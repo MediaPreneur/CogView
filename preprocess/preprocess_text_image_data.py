@@ -60,7 +60,6 @@ def extract_code(model, datasets, text_dict, name, device, txt_type):
                         index += 1
                 except KeyError:
                     print("warning: KeyError. The text cannot be find")
-                    pass
         txn.put('length'.encode('utf-8'), str(index).encode('utf-8'))
 
 
@@ -99,6 +98,5 @@ def extract_code_super_resolution_patches(model, datasets, text_dict, name, devi
                         index += 1
                 except KeyError:
                     print("warning: KeyError. The text cannot be find")
-                    pass
         txn.put('length'.encode('utf-8'), str(index).encode('utf-8'))
 

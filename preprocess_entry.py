@@ -29,42 +29,50 @@ if __name__ == "__main__":
 
     device = f'cuda:{args.device}'
     torch.cuda.set_device(device)
-    name = args.dataset + "_" + args.img_tokenizer_path.split(".")[0] + ".lmdb"
+    name = f"{args.dataset}_" + args.img_tokenizer_path.split(".")[0] + ".lmdb"
     args.img_tokenizer_path = f"pretrained/vqvae/{args.img_tokenizer_path}"
 
-    datasets = {}
-    datasets["ali"] = [
-        ['/root/mnt/sq_gouhou_white_pict_title_word_256_fulltitle.tsv'],
-        ['/root/mnt/dingming/ali_white_picts_256.zip'],
-        "tsv"
-    ]
-    datasets["ks3"] = [
-        ['/root/mnt/KS3/a_baidu_image_msg_data.json'],
-        ['/root/mnt/KS3/downloadImages.rar'],
-        "json_ks"
-    ]
-    datasets["zijian"] = [
-        ['/root/mnt/zijian/zj_duomotai_clean_done_data_new.json',
-         '/root/mnt/zijian/zj_duomotai_local_server_last_surplus_120w.json'],
-        ['/root/mnt/imageFolder_part01.rar',
-         '/root/mnt/zijian/imagesFolder_last_surplus_120w.rar'],
-        "json"
-    ]
-    datasets["google"] = [
-        ['/root/mnt/google/google_image_message_data.json'],
-        ['/root/mnt/google/downloadImage_2020_12_16.rar'],
-        "json_ks"
-    ]
-    datasets["zijian1"] = [
-        ['/root/mnt/zijian/zj_duomotai_clean_done_data_new.json'],
-        ['/root/cogview2/data/imageFolder_part01.rar'],
-        "json"
-    ]
-    datasets["zijian2"] = [
-        ['/root/mnt/zijian/zj_duomotai_local_server_last_surplus_120w.json'],
-        ['/root/mnt/zijian/imagesFolder_last_surplus_120w.rar'],
-        "json"
-    ]
+    datasets = {
+        "ali": [
+            ['/root/mnt/sq_gouhou_white_pict_title_word_256_fulltitle.tsv'],
+            ['/root/mnt/dingming/ali_white_picts_256.zip'],
+            "tsv",
+        ],
+        "ks3": [
+            ['/root/mnt/KS3/a_baidu_image_msg_data.json'],
+            ['/root/mnt/KS3/downloadImages.rar'],
+            "json_ks",
+        ],
+        "zijian": [
+            [
+                '/root/mnt/zijian/zj_duomotai_clean_done_data_new.json',
+                '/root/mnt/zijian/zj_duomotai_local_server_last_surplus_120w.json',
+            ],
+            [
+                '/root/mnt/imageFolder_part01.rar',
+                '/root/mnt/zijian/imagesFolder_last_surplus_120w.rar',
+            ],
+            "json",
+        ],
+        "google": [
+            ['/root/mnt/google/google_image_message_data.json'],
+            ['/root/mnt/google/downloadImage_2020_12_16.rar'],
+            "json_ks",
+        ],
+        "zijian1": [
+            ['/root/mnt/zijian/zj_duomotai_clean_done_data_new.json'],
+            ['/root/cogview2/data/imageFolder_part01.rar'],
+            "json",
+        ],
+        "zijian2": [
+            [
+                '/root/mnt/zijian/zj_duomotai_local_server_last_surplus_120w.json'
+            ],
+            ['/root/mnt/zijian/imagesFolder_last_surplus_120w.rar'],
+            "json",
+        ],
+    }
+
     txt_files, img_folders, txt_type = datasets[args.dataset]
 
     os.environ['UNRAR_LIB_PATH'] = '/usr/local/lib/libunrar.so'
@@ -107,6 +115,7 @@ if __name__ == "__main__":
             ]))
         datasets.append(dataset)
     print('Finish reading meta-data of dataset.')
+    tmp = []
     # ===================== END OF BLOCK ======================= #
 
     # from preprocess import show_recover_results
@@ -131,10 +140,7 @@ if __name__ == "__main__":
             with open(txt, 'r') as fin:
                 t = json.load(fin)
                 txt_list.extend(list(t.items()))
-        tmp = []
-        for k, v in tqdm(txt_list):
-            tmp.append((v['uniqueKey'], v['cnShortText']))
-        text_dict = dict(tmp)
+        tmp.extend((v['uniqueKey'], v['cnShortText']) for k, v in tqdm(txt_list))
     elif txt_type == "json_ks":
         import json
         txt_list = []
@@ -142,27 +148,23 @@ if __name__ == "__main__":
             with open(txt, 'r') as fin:
                 t = json.load(fin)
             txt_list.extend(t["RECORDS"])
-        tmp = []
-        for v in tqdm(txt_list):
-            tmp.append((v['uniqueKey'], v['cnShortText']))
-        text_dict = dict(tmp)
+        tmp.extend((v['uniqueKey'], v['cnShortText']) for v in tqdm(txt_list))
     elif txt_type == "tsv":
         import pandas as pd
         txt_list = []
         for txt in txt_files:
             t = pd.read_csv(txt, sep='\t')
             txt_list.extend(list(t.values))
-        tmp = []
-        for k, v in tqdm(txt_list):
-            tmp.append((str(k), v))
-        text_dict = dict(tmp)
+        tmp.extend((str(k), v) for k, v in tqdm(txt_list))
     else:
         des = dataset.h5["input_concat_description"]
         txt_name = dataset.h5["input_name"]
-        tmp = []
-        for i in tqdm(range(len(des))):
-            tmp.append((i, des[i][0].decode("latin-1")+txt_name[i][0].decode("latin-1")))
-        text_dict = dict(tmp)
+        tmp.extend(
+            (i, des[i][0].decode("latin-1") + txt_name[i][0].decode("latin-1"))
+            for i in tqdm(range(len(des)))
+        )
+
+    text_dict = dict(tmp)
     print('Finish reading texts of dataset.')
     # ===================== END OF BLOCK ======================= #
 

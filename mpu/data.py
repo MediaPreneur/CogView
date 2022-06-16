@@ -26,8 +26,9 @@ _MAX_DATA_DIM = 5
 def _check_data_types(keys, data, target_dtype):
     """Check that all the keys have the same target data type."""
     for key in keys:
-        assert data[key].dtype == target_dtype, '{} has data type {} which '\
-            'is different than {}'.format(key, data[key].dtype, target_dtype)
+        assert (
+            data[key].dtype == target_dtype
+        ), f'{key} has data type {data[key].dtype} which is different than {target_dtype}'
 
 
 def _build_key_size_numel_dictionaries(keys, data):

@@ -27,7 +27,7 @@ def is_exp2(x):
     return abs(t - int(t)) < 1e-4
 def sqrt_int(x):
     r = int(math.sqrt(x) + 1e-4)
-    assert r * r == x
+    assert r**2 == x
     return r
 
 class VQVAETokenizer(object):
@@ -66,8 +66,7 @@ class VQVAETokenizer(object):
             assert s * s == len(code.view(-1))
             shape = (1, s, s)
         code = code.view(shape)
-        out = code2img(self.model, code)
-        return out
+        return code2img(self.model, code)
 
     def read_img(self, path, img_size=256):
         tr = transforms.Compose([

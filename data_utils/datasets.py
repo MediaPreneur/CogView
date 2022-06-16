@@ -90,14 +90,13 @@ def get_dataset_by_type(dataset_type, path: str, args, DS_CLASS=LMDBDataset):
 
     def pad_to_len(ret):
         
-        if len(ret) < ml: # pad
+        if len(ret) < ml:
             return np.concatenate((ret, 
                 np.array([tokenizer['[PAD]']] * (ml - len(ret)))),
                 axis=0), len(ret)
-        else:
-            if len(ret) > ml:
-                logger.warning('Out of max len, truncated.')
-            return ret[:ml], ml
+        if len(ret) > ml:
+            logger.warning('Out of max len, truncated.')
+        return ret[:ml], ml
 
     if dataset_type == 'TokenizedDataset':
         # already tokenized when saved
